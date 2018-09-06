@@ -1,4 +1,4 @@
-set terminal pngcairo font ",14"
+set terminal pngcairo size 400,300 font "Arial,9"
 
 set output "example1.png"
 
