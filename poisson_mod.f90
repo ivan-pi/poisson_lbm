@@ -5,7 +5,10 @@ module precision_mod
 
     public :: wp
 
-    integer, parameter :: wp = kind(1.0d0)
+    integer, parameter :: sp = kind(1.0e0)  ! single precision
+    integer, parameter :: dp = kind(1.0d0)  ! double precision
+
+    integer, parameter :: wp = dp   ! working precison
 
 end module
 
@@ -44,7 +47,7 @@ module poisson_mod
     private
 
     public :: wp, source_term 
-    public :: Lattice, init_Lattice, analytical_solution
+    public :: Lattice, init_Lattice
 
     ! D1Q3 Model Parameters
     integer, parameter :: e(3) = [0,1,-1]
@@ -52,13 +55,11 @@ module poisson_mod
     real(wp), parameter :: wbar(3) = [0._wp,0.5_wp,0.5_wp]
     real(wp), parameter :: alpha = 1._wp/3._wp ! Speed of sound squared $c_\mathrm{s}^2$
 
-    real(wp), parameter :: coef = 1._wp/(1._wp - w(1))
-
-
-
+    real(wp), parameter :: coef = 1._wp/(1._wp - w(1)) ! coefficient in macroscopic value sum, see Eq. (2.5)
 
 
 !>  Derived type to encapsulate the lattice Boltzmann algorithm
+!   
     type :: Lattice
         real(wp) :: interval(2)
         integer :: nx
@@ -160,6 +161,7 @@ contains
             feq(2) = w(2)*u
             feq(3) = w(3)*u
 
+            ! Evaluate source term
             x = this%interval(1) + (i-1)*this%dx
             source = this%src%eval(u,x)
 
@@ -169,9 +171,10 @@ contains
             f(i-1,3,new) = one_minus_omega*f(i,3,old) + omega*feq(3) + dt*wbar(3)*D*source
         end do spatial_loop
 
-        ! Bounceback by default
+        ! Perform bounceback by default
         f(1,2,new) = f(0,3,new)
         f(nx,3,new) = f(nx+1,2,new)
+
         end associate
 
     end subroutine
@@ -234,8 +237,6 @@ contains
     subroutine get_macroscopic_values(this,u)
         class(Lattice), intent(in) :: this
         real(wp), intent(out) :: u(this%nx)
-        real(wp), parameter :: coef = 1._wp/(1._wp - w(1)) 
-
         u(:) = coef*sum(this%f(1:this%nx,2:3,this%old),dim=2)
     end subroutine
 
@@ -260,33 +261,18 @@ contains
         close(iunit)
     end subroutine
 
-
-!>  Returns analytical solution of $\Delta u = k^2 u$ on
-!   the domain $\[0,1\]$ with constant Dirichlet boundary conditions
-!   $u(0) = 1$, $u(1) = 1$.
-!
-!   See Eq. (3.4) in paper by Chai and Shi (2008)
-
-    elemental function analytical_solution(x,k) result(u)
-        real(wp), intent(in) :: x
-        real(wp), intent(in) :: k
-        real(wp) :: u
-
-        u = (exp(k) - 1.0_wp)/(exp(k) - exp(-k))*exp(-k*x) + &
-           & (1.0_wp - exp(-k))/(exp(k) - exp(-k))*exp(k*x)
-    end function
-
 end module
 
-module poisson_boltzmann
+module poisson_example_mod
 
     use precision_mod, only: wp
     use source_mod, only: source_term
+    use poisson_mod, only: Lattice, init_Lattice
 
     implicit none
     private
 
-    public :: pb_src, init_pb_src
+    public :: pb_src, init_pb_src, poisson_example, analytical_solution
 
     type, extends(source_term) :: pb_src ! poisson boltzmann source
         real(wp) :: k
@@ -309,11 +295,71 @@ contains
         eval = this%k**2*u
     end function
 
+!>  Returns analytical solution of $\Delta u = k^2 u$ on
+!   the domain $\[0,1\]$ with constant Dirichlet boundary conditions
+!   $u(0) = 1$, $u(1) = 1$.
+!
+!   See Eq. (3.4) in paper by Chai and Shi (2008)
+!
+    elemental function analytical_solution(x,k) result(u)
+        real(wp), intent(in) :: x
+        real(wp), intent(in) :: k
+        real(wp) :: u
+
+        u = (exp(k) - 1.0_wp)/(exp(k) - exp(-k))*exp(-k*x) + &
+           & (1.0_wp - exp(-k))/(exp(k) - exp(-k))*exp(k*x)
+    end function
+
+
+    subroutine poisson_example(k,nx,steps,check,tol)
+        real(wp), intent(in) :: k
+        integer, intent(in) :: nx, steps, check
+        real(wp) :: tol
+
+        real(wp), allocatable :: uold(:), u(:)
+        real(wp) :: gre, omega
+        type(Lattice) :: latt
+        type(pb_src), target :: mysrc
+        integer :: i, step
+
+        ! Initalize density arrays
+        allocate(uold(nx),u(nx))
+        uold = 0.0_wp; uold([1,nx]) = 1._wp
+
+        ! Create source term
+        mysrc = init_pb_src(k)
+        
+        ! Create lattice
+        omega = 1.0_wp
+        latt = init_Lattice(nx=nx,uinit=uold,omega=omega,src=mysrc)
+
+        time_loop: do step = 1, steps
+
+            call latt%collide_and_stream()
+
+            call latt%set_left_neem(1.0_wp)
+            call latt%set_right_neem(1.0_wp)
+            
+            ! Check convergence
+            if (mod(step,check) == 0) then
+                call latt%get_macroscopic_values(u)
+                gre = sum(abs(u-uold))/sum(abs(u)) ! global relative error
+                uold = u
+                write(*,*) "step = ", step, "error = ", gre
+                if (gre < tol) exit time_loop
+            end if
+
+            call latt%prep_next_step()
+        end do time_loop
+
+        call latt%output("poisson_results.txt")
+
+    end subroutine
+
 end module
 
 
-
-module example_mod
+module reaction_example_mod
 
     use precision_mod, only: wp
     use source_mod, only: source_term
@@ -345,134 +391,75 @@ contains
         eval = this%Th**2*u
     end function
 
-    subroutine reaction_example()
+    subroutine reaction_example(Th,nx,steps,check,tol)
+        real(wp), intent(in) :: Th
+        integer, intent(in) :: nx
+        integer, intent(in) :: steps
+        integer, intent(in) :: check
+        real(wp), intent(in) :: tol
 
-        integer, parameter :: nx = 101
-        integer, parameter :: num_steps = 1000000, check = 5000
-
-        real(wp) :: tolerance
         real(wp), allocatable :: uold(:), u(:)
-        real(wp) :: interval(2), gre = 1.0_wp, omega, Th, rval
+        real(wp) :: interval(2), gre, omega, rval
         type(Lattice) :: latt
 
         type(rc_src), target :: mysrc
 
         integer :: i, step
 
-        tolerance = epsilon(gre)
-
         ! Initalize density arrays
         allocate(uold(nx),u(nx))
         uold = 0.0_wp;    
+        u = uold
 
         ! Create source term
-        Th = 5.0_wp
         mysrc = init_rc_src(Th)
         
         ! Create lattice
         omega = 1.0_wp
         latt = init_Lattice(nx=nx,uinit=uold,omega=omega,src=mysrc)
 
-        call latt%get_macroscopic_values(u)
-        print *, "uinit = ", u
-
-        time_loop: do step = 1, num_steps
-
-            ! print *, "step = ", step
+        time_loop: do step = 1, steps
 
             call latt%collide_and_stream(uout=u)
 
+            ! Boundaries
             call latt%set_left_neem(1.0_wp)
-
             rval = (4.0_wp*u(nx-1) - u(nx-2))/3.0_wp ! one-sided finite difference
             call latt%set_right_neem(rval)
             
-            ! Check convergence
+            ! Convergence check
             if (mod(step,check) == 0) then
-                call latt%get_macroscopic_values(u)
                 gre = sum(abs(u-uold))/sum(abs(u)) ! global relative error
                 uold = u
-                print *, step, gre
-                if (gre < tolerance) exit time_loop
+                write(*,*) "step = ", step, "error = ", gre
+                if (gre < tol) exit time_loop
             end if
 
             call latt%prep_next_step()
         end do time_loop
 
-        call latt%get_macroscopic_values(u)
-        print *, u
-
         call latt%output("reaction_results.txt")
+
     end subroutine
 
 end module
 
 
-
 program main
 
     use precision_mod, only: wp
-    use poisson_mod, only: Lattice, init_Lattice, analytical_solution
-    use poisson_boltzmann, only: pb_src, init_pb_src
-    use example_mod, only: reaction_example
+    use poisson_example_mod, only: poisson_example
+    use reaction_example_mod, only: reaction_example
 
-    integer, parameter :: nx = 101
-    integer, parameter :: num_steps = 1000000, check = 5000
+    real(wp) :: tol
 
-    real(wp) :: tolerance
+    tol = epsilon(tol) ! Set tolerance
 
-    real(wp), allocatable :: uold(:), u(:)
+    write(*,*) "Poisson example"
+    call poisson_example(k=27.79_wp,nx=101,steps=1000000,check=5000,tol=tol)
     
-    real(wp) :: interval(2), gre = 1.0_wp, omega, k
-    type(Lattice) :: latt
+    write(*,*) ""
+    write(*,*) "Reaction example"
+    call reaction_example(Th=1.0_wp,nx=101,steps=1000000,check=5000,tol=tol)
 
-    type(pb_src), target :: mysrc
-
-    integer :: i, step
-
-    tolerance = epsilon(gre)
-
-    ! Initalize density arrays
-    allocate(uold(nx),u(nx))
-    uold = 0.0_wp;    
-    uold([1,nx]) = 1._wp
-
-    ! Create source term
-    k = 27.79_wp
-    mysrc = init_pb_src(k)
-    
-    ! Create lattice
-    omega = 1.0_wp
-    latt = init_Lattice(nx=nx,uinit=uold,omega=omega,src=mysrc)
-
-    call latt%get_macroscopic_values(u)
-    print *, "uinit = ", u
-
-    time_loop: do step = 1, num_steps
-
-        ! print *, "step = ", step
-
-        call latt%collide_and_stream()
-        call latt%set_left_neem(1.0_wp)
-        call latt%set_right_neem(1.0_wp)
-        
-        ! Check convergence
-        if (mod(step,check) == 0) then
-            call latt%get_macroscopic_values(u)
-            gre = sum(abs(u-uold))/sum(abs(u)) ! global relative error
-            uold = u
-            print *, step, gre
-            if (gre < tolerance) exit time_loop
-        end if
-
-        call latt%prep_next_step()
-    end do time_loop
-
-    call latt%get_macroscopic_values(u)
-    print *, u
-
-    call latt%output("results.txt")
-
-
-    call reaction_example()
 end program
