@@ -18,8 +18,10 @@ The analytical solution of this problem is given by $$u(x) = \left(\frac{e^{k} -
 </p>
 
 In the second example we solve a steady-state reaction diffusion problem. For a first-order reaction in a catalyst slab we can derive the following equation:
-$$\nabla^2 u = \mathit{Th}^2 u$$ and boundary conditions $$u(0)=1, \quad \frac{\partial u}{\partial x}|_{x=1}=0.$$ The value $Th$ is known as the Thiele modulus and represents the ratio between the reaction rate and the diffusion rate. An analytical solution for this problem is given by $$u(x) = \frac{\cosh\left(\mathit{Th}(1-x)\right)}{\cosh(\mathit{Th})}.$$ 
+$$\nabla^2 u = \mathit{Th}^2 u$$ and boundary conditions $$u(0)=1, \quad \frac{\partial u}{\partial x}|_{x=1}=0.$$ 
+The value Th is known as the Thiele modulus and represents the ratio between the reaction rate and the diffusion rate. An analytical solution for this problem is given by $$u(x) = \frac{\cosh\left(\mathit{Th}(1-x)\right)}{\cosh(\mathit{Th})}.$$ 
 The symmetry (or zero-flux) boundary condition can be implemented with a second-order one-sided finite difference. A plot of the agreement between analytical and numerical solutions is shown below:
+
 <p align="center">
   <img width="400" height="300" src="/img/example2.png">
 </p>
