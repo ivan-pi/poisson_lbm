@@ -9,4 +9,8 @@ This package contains an implementation of the one-dimensional Poisson solver fr
 ## Examples
 
 Usage examples can be found in the apps folder.
-In the first example we solve the Poisson-Boltzmann equation with Debye-Huckel approximation $$\nabla^2 u = k^2 u$$
+
+In the first example we solve the Poisson-Boltzmann equation with Debye-Huckel approximation as described in the original paper. The equation is given as $$\nabla^2 u = k^2 u$$ with the boundary conditions $$u(0)=1, \quad u(1)=1$$. The analytical solution of this problem is given by $$\frac{\exp(k) - 1}{\exp(k) - \exp(-k)} \exp(-kx) + \frac{1 - \exp(-k)}{\exp(k) - \exp(-k)} \exp(kx)$$. A plot of the analytical and numerical solutions is shown below:
+
+In the second example we solve a steady-state reaction diffusion problem. For a first-order reaction in a catalyst slab we can derive the following equation:
+$$\nabla^2 u = \mathit{Th}^2 u$$ and boundary conditions $$u(0)=1, \quad \frac{\partial u}{\partial x}|_{x=1}=0.$$ The value $Th$ is known as the Thiele modulus and represents the ratio between the reaction rate and the diffusion rate. An analytical solution for this problem is given by $$u(x) = \frac{cosh\left(\mathit{Th}(1-x)\right)}{\cosh(\mathit{Th})}$$. The right boundary condition is implemented with a second-order one-sided finite difference. A plot of the agreement between analytical and numerical solutions is shown below:
