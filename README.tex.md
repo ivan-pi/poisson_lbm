@@ -12,6 +12,7 @@ Usage examples can be found in the apps folder.
 
 In the first example we solve the Poisson-Boltzmann equation with Debye-Huckel approximation as described in the original paper. The equation is given as $$\nabla^2 u = k^2 u$$ with the boundary conditions $$u(0)=1, \quad u(1)=1.$$
 The analytical solution of this problem is given by $$u(x) = \left(\frac{e^{k} - 1}{e^{k} - e^{-k}}\right) e^{-kx} + \left(\frac{1 - e^{-k}}{e^{k} - e^{-k}}\right) e^{kx}.$$ A plot of the analytical and numerical solutions is shown below: 
+
 <p align="center">
   <img width="400" height="300" src="/img/example1.png">
 </p>
